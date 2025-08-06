@@ -46,15 +46,13 @@ app.use('/icon', express.static(path.join(__dirname, 'icon')));
 // API路由 - 添加移动设备API响应优化
 app.use('/api', apiResponseOptimization, routes);
 
-// SPA fallback - 所有非API和非静态资源请求都返回index.html
+// SPA fallback - 所有非API请求都返回index.html
 app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api') && !req.path.startsWith('/assets') && !req.path.startsWith('/icon') && req.path !== '/vite.svg') {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-  } else if (req.path.startsWith('/api')) {
+  if (req.path.startsWith('/api')) {
     res.status(404).json({ success: false, message: 'API endpoint not found' });
   } else {
-    // 静态资源404
-    res.status(404).end();
+    // 对于所有其他请求，都返回index.html，让前端路由处理
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
   }
 });
 
