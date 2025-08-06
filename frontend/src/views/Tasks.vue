@@ -324,13 +324,32 @@ const clearTasks = async () => {
       }
     )
     
-    await api.delete('/api/tasks')
-    ElMessage.success('任务记录清空成功')
-    // 强制刷新，绕过缓存
-    loadTasks(true)
+    const response = await api.delete('/api/tasks', {
+      // 禁用缓存
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    })
+    
+    console.log('清空任务响应:', response.data)
+    ElMessage.success(response.data.message || '任务记录清空成功')
+    
+    // 立即清空本地数据以获得即时反馈
+    tasks.value = []
+    pagination.total = 0
+    
+    // 由于后端异步处理，稍微延迟刷新
+    setTimeout(() => {
+      loadTasks(true)
+    }, 1000) // 给后端更多时间处理
+    
   } catch (error) {
+    console.error('清空任务失败:', error)
     if (error !== 'cancel') {
-      ElMessage.error('清空任务记录失败，请重试')
+      ElMessage.error(error.response?.data?.message || '清空任务记录失败，请重试')
+      // 失败时也强制刷新以确保数据一致
+      loadTasks(true)
     }
   }
 }

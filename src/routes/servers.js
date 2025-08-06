@@ -11,7 +11,7 @@ router.get('/', checkAnyPermission(['servers', 'parameters']), serverController.
 router.get('/:id', checkPermission('servers'), serverController.getServer);
 router.post('/', checkPermission('servers'), validateServer, serverController.createServer);
 router.put('/:id', checkPermission('servers'), validateServer, serverController.updateServer);
-router.delete('/:id', requireRole(['admin']), serverController.deleteServer);
+router.delete('/:id', checkPermission('servers'), serverController.deleteServer);
 router.post('/:id/test', checkPermission('servers'), serverController.testServerConnection);
 
 // 状态检测服务管理

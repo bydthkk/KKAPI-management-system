@@ -2,8 +2,21 @@ const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 const logger = require('../utils/logger');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
+// 强制要求JWT密钥，避免使用不安全的默认值
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
+
+// 验证JWT密钥是否已设置
+if (!JWT_SECRET) {
+  logger.error('CRITICAL: JWT_SECRET environment variable is not set!');
+  logger.error('Please set JWT_SECRET before starting the application');
+  process.exit(1);
+}
+
+// 验证JWT密钥强度
+if (JWT_SECRET.length < 32) {
+  logger.warn('WARNING: JWT_SECRET should be at least 32 characters long for security');
+}
 
 const generateToken = (user) => {
   return jwt.sign(

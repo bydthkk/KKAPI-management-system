@@ -287,11 +287,15 @@ const updateServer = async (req, res, next) => {
 };
 
 const deleteServer = async (req, res, next) => {
+  const { sequelize } = require('../config/database');
+  const transaction = await sequelize.transaction();
+  
   try {
     const { id } = req.params;
-    const server = await Server.findByPk(id);
+    const server = await Server.findByPk(id, { transaction });
 
     if (!server) {
+      await transaction.rollback();
       return res.status(404).json({
         success: false,
         message: '服务器不存在'
@@ -300,18 +304,24 @@ const deleteServer = async (req, res, next) => {
 
     // 先删除所有关联的参数组
     const { Parameter } = require('../models');
-    await Parameter.destroy({
-      where: { serverId: id }
+    const deletedParameters = await Parameter.destroy({
+      where: { serverId: id },
+      transaction
     });
 
     logger.info('Deleted related parameters before server deletion', { 
       serverId: id,
+      parametersDeleted: deletedParameters,
       deletedBy: req.user.username 
     });
 
-    await server.destroy();
+    // 删除服务器
+    await server.destroy({ transaction });
+    
+    // 提交事务
+    await transaction.commit();
 
-    logger.info('Server deleted', { 
+    logger.info('Server deleted successfully', { 
       serverId: id, 
       name: server.name,
       deletedBy: req.user.username 
@@ -322,6 +332,15 @@ const deleteServer = async (req, res, next) => {
       message: '服务器删除成功'
     });
   } catch (error) {
+    // 回滚事务
+    await transaction.rollback();
+    
+    logger.error('Server deletion failed', {
+      serverId: req.params.id,
+      error: error.message,
+      deletedBy: req.user?.username
+    });
+    
     next(error);
   }
 };
@@ -379,18 +398,38 @@ const testServerConnection = async (req, res, next) => {
 
     await server.update(updateData);
 
+    // 重新从数据库获取更新后的服务器信息
+    await server.reload();
+
     logger.info('Server connection tested', { 
       serverId: server.id, 
       host: server.host,
       success: result.success,
+      status: server.status,
       forceOnline: !!forceOnline,
       testedBy: req.user.username 
     });
 
-    // 修复：正确返回测试结果，不要总是返回success: true
+    // 返回测试结果和更新后的服务器信息
     res.json({
       success: result.success,
-      data: result,
+      data: {
+        ...result,
+        server: {
+          id: server.id,
+          name: server.name,
+          host: server.host,
+          port: server.port,
+          status: server.status,
+          osName: server.osName,
+          osVersion: server.osVersion,
+          osIcon: server.osIcon,
+          architecture: server.architecture,
+          lastTestAt: server.lastTestAt,
+          lastTestTime: server.lastTestAt ? new Date(server.lastTestAt).toLocaleString('zh-CN') : '未测试',
+          createTime: new Date(server.createdAt).toLocaleString('zh-CN')
+        }
+      },
       message: forceOnline 
         ? '服务器状态已手动设置为在线' 
         : result.success 
@@ -406,6 +445,7 @@ const testServerConnection = async (req, res, next) => {
     });
 
     // 更新服务器状态为离线
+    let serverInfo = null;
     try {
       const server = await Server.findByPk(req.params.id);
       if (server) {
@@ -413,6 +453,22 @@ const testServerConnection = async (req, res, next) => {
           status: 'offline',
           lastTestAt: new Date()
         });
+        await server.reload();
+        
+        serverInfo = {
+          id: server.id,
+          name: server.name,
+          host: server.host,
+          port: server.port,
+          status: server.status,
+          osName: server.osName,
+          osVersion: server.osVersion,
+          osIcon: server.osIcon,
+          architecture: server.architecture,
+          lastTestAt: server.lastTestAt,
+          lastTestTime: server.lastTestAt ? new Date(server.lastTestAt).toLocaleString('zh-CN') : '未测试',
+          createTime: new Date(server.createdAt).toLocaleString('zh-CN')
+        };
       }
     } catch (updateError) {
       logger.error('Failed to update server status', { error: updateError.message });
@@ -423,7 +479,8 @@ const testServerConnection = async (req, res, next) => {
       data: {
         success: false,
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        server: serverInfo
       },
       message: `连接测试失败: ${error.message}`
     });

@@ -113,7 +113,7 @@ const { authenticateToken } = require('../middleware/auth');
 const logger = require('../utils/logger');
 const sshService = require('../services/sshService');
 
-// 动态API路由放在最后，并添加排除已定义路由的逻辑
+// 动态API路由放在最后，只匹配单层路径且不与现有路由冲突
 router.get('/:apiEndpoint', authenticateToken, async (req, res, next) => {
   const { apiEndpoint } = req.params;
   
@@ -121,7 +121,7 @@ router.get('/:apiEndpoint', authenticateToken, async (req, res, next) => {
   const reservedRoutes = [
     'auth', 'ssh', 'servers', 'parameters', 'tasks', 
     'dashboard', 'logs', 'monitor', 'system-settings', 'users', 
-    'health'
+    'health', 'mobile'
   ];
   
   if (reservedRoutes.includes(apiEndpoint)) {
@@ -195,6 +195,10 @@ router.get('/:apiEndpoint', authenticateToken, async (req, res, next) => {
     // 创建任务记录
     let task = null;
     try {
+      // 确保时间戳正确
+      const now = new Date();
+      const startTime = result.timestamp ? new Date(result.timestamp) : now;
+      
       task = await Task.create({
         parameterId: parameter.id,
         serverId: parameter.server.id,
@@ -203,9 +207,17 @@ router.get('/:apiEndpoint', authenticateToken, async (req, res, next) => {
         status: result.success ? 'success' : 'failed',
         progress: result.success ? 100 : 0,
         output: result.stdout || null,
-        error: result.stderr || null,
-        startTime: new Date(result.timestamp),
-        endTime: new Date()
+        error: result.stderr || result.error || null,
+        startTime: startTime,
+        endTime: now
+      });
+
+      logger.debug_dev('Dynamic API task created:', {
+        taskId: task.id,
+        parameterId: parameter.id,
+        serverId: parameter.server.id,
+        status: task.status,
+        method: 'dynamic-api'
       });
 
       logger.info('Dynamic API task record created', {
@@ -213,13 +225,20 @@ router.get('/:apiEndpoint', authenticateToken, async (req, res, next) => {
         apiEndpoint,
         parameterId: parameter.id,
         serverId: parameter.server.id,
-        executedBy: req.user?.username || 'api-key-access'
+        command: command,
+        status: result.success ? 'success' : 'failed',
+        executedBy: req.user?.username || 'api-access'
       });
     } catch (error) {
+      logger.error_dev('Failed to create task record:', error);
       logger.error('Failed to create task record for dynamic API', {
         apiEndpoint,
-        error: error.message
+        parameterId: parameter.id,
+        serverId: parameter.server.id,
+        error: error.message,
+        stack: error.stack
       });
+      // 不要因为任务记录创建失败而中断API响应
     }
 
     res.json({

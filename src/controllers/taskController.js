@@ -8,6 +8,27 @@ const path = require('path');
 const taskQueue = [];
 const runningTasks = new Map();
 
+// 定期清理已完成的任务，防止内存泄漏
+setInterval(() => {
+  const now = Date.now();
+  const maxAge = 10 * 60 * 1000; // 10分钟
+  
+  for (const [taskId, taskData] of runningTasks.entries()) {
+    // 如果任务已完成且超过10分钟，从内存中清除
+    if (taskData.status !== 'running' && 
+        taskData.endTime && 
+        (now - new Date(taskData.endTime).getTime()) > maxAge) {
+      runningTasks.delete(taskId);
+      logger.debug_dev('Cleaned up completed task from memory:', { taskId, status: taskData.status });
+    }
+  }
+  
+  // 清理孤立的任务（没有对应数据库记录的任务）
+  if (runningTasks.size > 100) {
+    logger.warn('RunningTasks map growing large, checking for orphaned tasks', { size: runningTasks.size });
+  }
+}, 5 * 60 * 1000); // 每5分钟清理一次
+
 const getTasks = async (req, res, next) => {
   try {
     const { 
@@ -183,9 +204,13 @@ const stopTask = async (req, res, next) => {
       });
     }
 
-    // 从运行中任务移除
+    // 从运行中任务移除并更新状态
     if (runningTasks.has(id)) {
-      runningTasks.delete(id);
+      const taskData = runningTasks.get(id);
+      if (taskData) {
+        taskData.status = 'stopped';
+        taskData.endTime = new Date();
+      }
     }
 
     // 更新任务状态
@@ -218,26 +243,56 @@ const clearTasks = async (req, res, next) => {
     // 清空任务队列
     taskQueue.length = 0;
     
-    // 删除所有任务记录
-    const deletedCount = await Task.destroy({
-      where: {},
-      truncate: true // 更快的清空方式，重置自增ID
-    });
-
-    logger.info('All tasks cleared by user', { 
-      deletedCount,
-      runningTasksStopped: runningTaskIds.length,
-      clearedBy: req.user?.username || 'system',
-      ip: req.ip 
-    });
-
+    // 获取删除前的任务数量（快速统计）
+    const taskCountBefore = await Task.count();
+    logger.debug_dev(`删除前任务数量: ${taskCountBefore}`);
+    
+    // 立即返回成功响应
     res.json({
       success: true,
-      message: `成功清空 ${deletedCount} 条任务记录`
+      message: `开始清空 ${taskCountBefore} 条任务记录...`,
+      details: {
+        estimatedTasks: taskCountBefore,
+        stoppedRunningTasks: runningTaskIds.length,
+        status: 'processing'
+      }
     });
+
+    // 异步删除任务，不阻塞响应
+    setImmediate(async () => {
+      try {
+        // 批量删除，提高性能
+        const result = await Task.destroy({
+          where: {},
+          force: true, // 强制删除
+          truncate: false, // 不使用truncate
+          // 增加批处理大小以提高性能
+          limit: 10000 // 分批处理
+        });
+        
+        // 验证删除结果
+        const taskCountAfter = await Task.count();
+        logger.debug_dev(`删除后任务数量: ${taskCountAfter}`);
+
+        logger.info('All tasks cleared by user (async)', { 
+          taskCountBefore,
+          taskCountAfter,
+          actualDeleted: result,
+          runningTasksStopped: runningTaskIds.length,
+          clearedBy: req.user?.username || 'system',
+          ip: req.ip 
+        });
+      } catch (error) {
+        logger.error('Failed to clear tasks asynchronously:', error);
+      }
+    });
+
   } catch (error) {
     logger.error('Failed to clear tasks:', error);
-    next(error);
+    res.status(500).json({
+      success: false,
+      message: '清空任务失败: ' + error.message
+    });
   }
 };
 
@@ -275,7 +330,12 @@ const processTaskQueue = async () => {
     setTimeout(() => processTaskQueue(), 1000);
   } catch (error) {
     logger.error('Error processing task queue:', error);
-    runningTasks.delete(taskId);
+    // 任务执行失败，更新状态但保留供日志查询
+    const taskData = runningTasks.get(taskId);
+    if (taskData) {
+      taskData.status = 'failed';
+      taskData.endTime = new Date();
+    }
     setTimeout(() => processTaskQueue(), 5000);
   }
 };
@@ -350,7 +410,12 @@ const executeTaskInternal = async (task) => {
       endTime: new Date()
     });
   } finally {
-    runningTasks.delete(task.id);
+    // 更新任务状态但保留供短时间查询
+    const taskData = runningTasks.get(task.id);
+    if (taskData) {
+      taskData.status = 'completed';
+      taskData.endTime = new Date();
+    }
     // 继续处理队列
     setTimeout(() => processTaskQueue(), 1000);
   }

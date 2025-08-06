@@ -45,12 +45,30 @@ const readLogsOptimized = async (logFile, filters) => {
   const { page, pageSize, level, service, keyword, startTime, endTime } = filters;
   
   try {
-    // 使用流式读取，避免一次性加载整个文件
+    // 检查文件大小，如果过大则限制读取
+    const fs = require('fs');
+    const stats = await fs.promises.stat(logFile);
+    const fileSizeInMB = stats.size / (1024 * 1024);
+    
+    // 如果文件超过50MB，只读取最后部分
+    const maxSizeInMB = 50;
+    const shouldLimitRead = fileSizeInMB > maxSizeInMB;
+    
+    if (shouldLimitRead) {
+      logger.warn(`Log file size (${fileSizeInMB.toFixed(2)}MB) exceeds limit, reading last ${maxSizeInMB}MB only`);
+    }
+
     const readline = require('readline');
-    const fileStream = require('fs').createReadStream(logFile, { 
-      encoding: 'utf8',
-      highWaterMark: 64 * 1024 // 64KB chunks
-    });
+    const fileStream = shouldLimitRead 
+      ? require('fs').createReadStream(logFile, { 
+          encoding: 'utf8',
+          start: stats.size - (maxSizeInMB * 1024 * 1024), // 从文件后部开始读取
+          highWaterMark: 64 * 1024
+        })
+      : require('fs').createReadStream(logFile, { 
+          encoding: 'utf8',
+          highWaterMark: 64 * 1024
+        });
 
     const rl = readline.createInterface({
       input: fileStream,
@@ -59,12 +77,22 @@ const readLogsOptimized = async (logFile, filters) => {
 
     let allLogs = [];
     let lineNumber = 0;
+    let processedCount = 0;
+    const maxProcessLines = 10000; // 限制处理的行数
 
     // 逐行读取和过滤
     for await (const line of rl) {
       if (!line.trim()) continue;
       
       lineNumber++;
+      processedCount++;
+      
+      // 限制处理的行数，避免内存过载
+      if (processedCount > maxProcessLines) {
+        logger.warn(`Stopped processing after ${maxProcessLines} lines to prevent memory issues`);
+        break;
+      }
+
       let logEntry;
       
       try {
@@ -99,6 +127,11 @@ const readLogsOptimized = async (logFile, filters) => {
       }
 
       allLogs.push(logEntry);
+      
+      // 如果已经收集了足够的日志（比分页需要的多一些），可以提前结束
+      if (allLogs.length > (page * pageSize + pageSize * 2)) {
+        break;
+      }
     }
 
     // 倒序排列（最新的在前）
@@ -121,7 +154,12 @@ const readLogsOptimized = async (logFile, filters) => {
       total,
       page,
       pageSize,
-      hasMore: endIndex < total
+      hasMore: endIndex < total,
+      fileInfo: {
+        sizeInMB: fileSizeInMB.toFixed(2),
+        limitedRead: shouldLimitRead,
+        processedLines: processedCount
+      }
     };
 
   } catch (error) {
@@ -133,7 +171,10 @@ const readLogsOptimized = async (logFile, filters) => {
       total: 0,
       page: 1,
       pageSize,
-      hasMore: false
+      hasMore: false,
+      fileInfo: {
+        error: error.message
+      }
     };
   }
 };
@@ -143,28 +184,42 @@ const clearLogs = async (req, res, next) => {
     const logFile = path.join(__dirname, '../../logs/app.log');
     const errorLogFile = path.join(__dirname, '../../logs/error.log');
 
-    // 确保日志目录存在
-    const logsDir = path.dirname(logFile);
-    await fs.mkdir(logsDir, { recursive: true });
-
-    // 清空日志文件
-    await Promise.all([
-      fs.writeFile(logFile, ''),
-      fs.writeFile(errorLogFile, '')
-    ]);
-
-    logger.info('Logs cleared by user', { 
-      clearedBy: req.user?.username || 'system',
-      ip: req.ip 
-    });
-
+    // 立即返回成功响应，异步处理文件操作
     res.json({
       success: true,
       message: '日志清空成功'
     });
+
+    // 异步清理日志文件，不阻塞响应
+    setImmediate(async () => {
+      try {
+        // 确保日志目录存在
+        const logsDir = path.dirname(logFile);
+        await fs.mkdir(logsDir, { recursive: true });
+
+        // 清空日志文件 - 使用更快的方式
+        await Promise.all([
+          fs.truncate(logFile, 0).catch(() => fs.writeFile(logFile, '')),
+          fs.truncate(errorLogFile, 0).catch(() => fs.writeFile(errorLogFile, ''))
+        ]);
+
+        logger.info('Logs cleared by user (async)', { 
+          clearedBy: req.user?.username || 'system',
+          ip: req.ip,
+          logFile: logFile,
+          errorLogFile: errorLogFile
+        });
+      } catch (error) {
+        logger.error('Failed to clear logs asynchronously:', error);
+      }
+    });
+
   } catch (error) {
     logger.error('Failed to clear logs:', error);
-    next(error);
+    res.status(500).json({
+      success: false,
+      message: '清空日志失败: ' + error.message
+    });
   }
 };
 

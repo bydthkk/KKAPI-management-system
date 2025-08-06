@@ -215,12 +215,32 @@ const clearLogs = async () => {
       }
     )
     
-    await api.delete('/api/logs')
-    ElMessage.success('日志清空成功')
-    loadLogs()
+    const response = await api.delete('/api/logs', {
+      // 禁用缓存
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    })
+    
+    console.log('清空日志响应:', response.data)
+    ElMessage.success(response.data.message || '日志清空成功')
+    
+    // 立即清空本地数据以获得即时反馈
+    logs.value = []
+    pagination.total = 0
+    
+    // 由于后端异步处理，稍微延迟刷新
+    setTimeout(() => {
+      loadLogs()
+    }, 1000) // 给后端更多时间处理文件清空
+    
   } catch (error) {
+    console.error('清空日志失败:', error)
     if (error !== 'cancel') {
-      ElMessage.error('清空日志失败，请重试')
+      ElMessage.error(error.response?.data?.message || '清空日志失败，请重试')
+      // 失败时也刷新以确保数据一致
+      loadLogs()
     }
   }
 }

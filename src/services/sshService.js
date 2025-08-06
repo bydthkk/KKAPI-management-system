@@ -6,6 +6,39 @@ const SystemSettings = require('../models/SystemSettings');
 class SSHService {
   constructor() {
     this.activeConnections = new Map();
+    
+    // 定期清理过期的连接，防止内存泄漏
+    setInterval(() => {
+      this.cleanupConnections();
+    }, 5 * 60 * 1000); // 每5分钟清理一次
+  }
+
+  // 清理过期或僵死的连接
+  cleanupConnections() {
+    const now = Date.now();
+    const maxAge = 10 * 60 * 1000; // 10分钟
+    
+    for (const [connectionId, connectionData] of this.activeConnections.entries()) {
+      if (now - connectionData.timestamp > maxAge) {
+        logger.debug_dev('Cleaning up expired SSH connection:', { connectionId });
+        
+        // 强制关闭连接
+        if (connectionData.connection && typeof connectionData.connection.end === 'function') {
+          try {
+            connectionData.connection.end();
+          } catch (error) {
+            logger.debug_dev('Error closing expired connection:', error.message);
+          }
+        }
+        
+        this.activeConnections.delete(connectionId);
+      }
+    }
+    
+    // 警告如果有太多活跃连接
+    if (this.activeConnections.size > 50) {
+      logger.warn('High number of active SSH connections', { count: this.activeConnections.size });
+    }
   }
 
   async getSecuritySettings() {
@@ -31,7 +64,7 @@ class SSHService {
     }
   }
 
-  async executeCommand(connectionConfig, command) {
+  async executeCommand(connectionConfig, command, bypassWhitelist = false) {
     // Get current security settings from database
     const securitySettings = await this.getSecuritySettings();
     
@@ -40,8 +73,8 @@ class SSHService {
         return reject(new Error('Command too long'));
       }
 
-      // 检查是否启用白名单
-      if (securitySettings.enableWhitelist) {
+      // 检查是否启用白名单（但允许绕过，用于测试连接等系统操作）
+      if (!bypassWhitelist && securitySettings.enableWhitelist) {
         const commandBase = command.split(' ')[0];
         const allowedCommands = securitySettings.allowedCommands;
         if (!allowedCommands.includes(commandBase)) {
@@ -52,10 +85,22 @@ class SSHService {
       const conn = new Client();
       const connectionId = `${connectionConfig.host}:${connectionConfig.port || config.ssh.defaultPort}`;
       
+      // 记录连接到活跃连接中
+      this.activeConnections.set(connectionId, {
+        connection: conn,
+        timestamp: Date.now(),
+        status: 'connecting'
+      });
+      
       logger.info(`Attempting SSH connection to ${connectionId}`);
 
       conn.on('ready', () => {
         logger.info(`SSH connection established to ${connectionId}`);
+        
+        // 更新连接状态
+        if (this.activeConnections.has(connectionId)) {
+          this.activeConnections.get(connectionId).status = 'ready';
+        }
         
         conn.exec(command, (err, stream) => {
           if (err) {
@@ -70,6 +115,9 @@ class SSHService {
           stream.on('close', (code, signal) => {
             logger.info(`Command completed with exit code: ${code}`);
             conn.end();
+            
+            // 从活跃连接中移除
+            this.activeConnections.delete(connectionId);
             
             resolve({
               success: true,
@@ -99,6 +147,10 @@ class SSHService {
           errorLevel: err.level,
           errorCode: err.code
         });
+        
+        // 从活跃连接中移除
+        this.activeConnections.delete(connectionId);
+        
         const sshError = new Error(`SSH connection failed: ${err.message}`);
         sshError.name = 'SSHError';
         reject(sshError);
@@ -167,7 +219,7 @@ class SSHService {
       
       for (const command of commands) {
         try {
-          const result = await this.executeCommand(connectionConfig, command);
+          const result = await this.executeCommand(connectionConfig, command, true); // 绕过白名单验证
           if (result.success) {
             results[command] = result.stdout;
           }
@@ -269,7 +321,7 @@ class SSHService {
 
   async testConnection(connectionConfig) {
     try {
-      const result = await this.executeCommand(connectionConfig, 'echo "Connection test successful"');
+      const result = await this.executeCommand(connectionConfig, 'echo "Connection test successful"', true); // 绕过白名单验证
       
       // 如果连接成功，尝试检测操作系统信息
       let osInfo = null;

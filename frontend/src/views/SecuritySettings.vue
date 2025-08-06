@@ -38,7 +38,9 @@
                 size="large"
                 active-text="启用"
                 inactive-text="禁用"
-                :active-color="settings.enableWhitelist ? '#67c23a' : '#409eff'"
+                active-color="#67c23a"
+                inactive-color="#dcdfe6"
+                @change="handleSwitchChange"
               />
             </el-col>
           </el-row>
@@ -179,7 +181,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Refresh, Check, Lock, Document, List, Plus, Warning 
@@ -190,6 +192,7 @@ const saving = ref(false)
 const newCommand = ref('')
 const dangerDialogVisible = ref(false)
 const pendingClearCommands = ref(false)
+const originalEnableWhitelist = ref(true) // 记住用户操作前的原始状态
 
 const settings = reactive({
   enableWhitelist: true,
@@ -215,17 +218,58 @@ const getCommandTagType = (command) => {
 
 const loadSettings = async () => {
   try {
+    console.log('正在加载安全设置...')
     const response = await api.get('/api/ssh/allowed-commands')
-    Object.assign(settings, response.data.data)
+    console.log('加载的设置数据:', response.data)
+    
+    if (response.data.success) {
+      // 确保数据类型正确
+      const data = response.data.data
+      
+      // 强制类型转换确保布尔值正确
+      const enableWhitelist = data.enableWhitelist === true || data.enableWhitelist === 'true'
+      settings.enableWhitelist = enableWhitelist
+      settings.allowedCommands = Array.isArray(data.allowedCommands) ? data.allowedCommands : []
+      settings.maxCommandLength = Number(data.maxCommandLength) || 1000
+      
+      // 记住加载时的状态作为原始状态
+      originalEnableWhitelist.value = enableWhitelist
+      
+      console.log('更新后的本地设置:', {
+        enableWhitelist: settings.enableWhitelist,
+        enableWhitelistType: typeof settings.enableWhitelist,
+        commandCount: settings.allowedCommands.length,
+        maxCommandLength: settings.maxCommandLength
+      })
+    } else {
+      console.error('API返回失败:', response.data)
+      ElMessage.error('加载安全设置失败')
+    }
   } catch (error) {
     console.error('加载安全设置失败:', error)
     ElMessage.error('加载安全设置失败')
   }
 }
 
+const handleSwitchChange = (value) => {
+  console.log('开关状态变化:', value)
+  
+  // 如果用户试图关闭白名单，记录当前（开启）状态为原始状态
+  if (!value) {
+    console.log('用户试图关闭白名单，记录原始状态为开启')
+    originalEnableWhitelist.value = true
+  }
+  
+  // 允许开关状态改变，但不立即保存
+  // 只在保存时检查危险操作
+}
+
 const saveSettings = async () => {
-  // 检查危险操作
+  console.log('准备保存设置:', { enableWhitelist: settings.enableWhitelist })
+  
+  // 检查危险操作 - 只有在关闭白名单时才提示
   if (!settings.enableWhitelist || pendingClearCommands.value) {
+    console.log('检测到危险操作，显示确认对话框')
     dangerDialogVisible.value = true
     return
   }
@@ -236,14 +280,35 @@ const saveSettings = async () => {
 const performSave = async () => {
   saving.value = true
   try {
-    await api.put('/api/ssh/security-settings', {
+    const response = await api.put('/api/ssh/security-settings', {
       enableWhitelist: settings.enableWhitelist,
       allowedCommands: settings.allowedCommands
     })
-    ElMessage.success('安全设置保存成功')
+    
+    if (response.data.success) {
+      // 使用后端返回的最新数据更新本地状态，但保持用户设置的开关状态
+      console.log('保存后收到的数据:', response.data.data)
+      const serverData = response.data.data
+      
+      // 只更新命令列表和最大长度，不更新开关状态（因为这是用户刚刚设置的）
+      settings.allowedCommands = Array.isArray(serverData.allowedCommands) ? serverData.allowedCommands : []
+      settings.maxCommandLength = Number(serverData.maxCommandLength) || 1000
+      
+      // 保存成功后更新原始状态为当前用户设置的状态
+      originalEnableWhitelist.value = settings.enableWhitelist
+      
+      ElMessage.success(response.data.message || '安全设置保存成功')
+      
+      // 移除重新加载，避免覆盖用户设置
+    } else {
+      ElMessage.error(response.data.message || '保存失败')
+    }
   } catch (error) {
     console.error('保存安全设置失败:', error)
     ElMessage.error('保存安全设置失败')
+    
+    // 保存失败时重新加载设置
+    loadSettings()
   } finally {
     saving.value = false
   }
@@ -296,8 +361,8 @@ const cancelDangerOperation = () => {
   if (pendingClearCommands.value) {
     pendingClearCommands.value = false
   } else {
-    // 如果是关闭白名单的操作，恢复设置
-    settings.enableWhitelist = true
+    // 恢复到用户操作前的原始状态
+    settings.enableWhitelist = originalEnableWhitelist.value
   }
   dangerDialogVisible.value = false
 }

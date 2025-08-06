@@ -50,7 +50,7 @@ const Server = sequelize.define('Server', {
     allowNull: true
   },
   status: {
-    type: DataTypes.ENUM('online', 'offline', 'unknown'),
+    type: DataTypes.ENUM('online', 'offline', 'testing', 'unknown'),
     defaultValue: 'unknown'
   },
   lastTestAt: {

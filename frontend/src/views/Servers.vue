@@ -11,7 +11,7 @@
         </div>
       </template>
 
-      <el-table :data="servers" style="width: 100%">
+      <el-table :data="servers" style="width: 100%" v-loading="loading" element-loading-text="加载中...">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column label="系统" width="120">
           <template #default="scope">
@@ -75,6 +75,13 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 空状态提示 -->
+      <div v-if="!loading && servers.length === 0" class="empty-state">
+        <el-empty description="暂无服务器">
+          <el-button type="primary" @click="showAddDialog">添加第一台服务器</el-button>
+        </el-empty>
+      </div>
     </el-card>
 
     <!-- 添加/编辑服务器对话框 -->
@@ -155,6 +162,7 @@ const dialogTitle = ref('添加服务器')
 const serverFormRef = ref()
 const saving = ref(false)
 const editingId = ref(null)
+const loading = ref(false)
 
 // 终端相关状态
 const terminalVisible = ref(false)
@@ -187,26 +195,42 @@ const serverRules = {
   ]
 }
 
-const loadServers = async () => {
+// 强制刷新服务器列表，绕过任何可能的缓存
+const forceReloadServers = async () => {
+  loading.value = true
   try {
-    const response = await api.get('/api/servers')
-    servers.value = response.data.data
+    console.log('强制重新加载服务器列表...')
+    
+    // 清空当前数组
+    servers.value = []
+    
+    // 添加随机参数防止缓存
+    const timestamp = Date.now()
+    const response = await api.get(`/api/servers?t=${timestamp}`)
+    
+    console.log('API响应:', response.data)
+    
+    if (response.data.success) {
+      servers.value = response.data.data || []
+      console.log(`加载了 ${servers.value.length} 个服务器`)
+    } else {
+      console.error('API返回失败状态:', response.data)
+      servers.value = []
+    }
   } catch (error) {
-    console.error('加载服务器列表失败:', error)
-    // 使用模拟数据
-    servers.value = [
-      {
-        id: 1,
-        name: '主服务器',
-        host: '109.248.161.245',
-        port: 22,
-        username: 'root',
-        status: '在线',
-        createTime: '2024-01-01 10:00'
-      }
-    ]
+    console.error('强制重新加载失败:', error)
+    servers.value = []
+    if (error.response) {
+      ElMessage.error(`加载失败: ${error.response.status} - ${error.response.data?.message || '未知错误'}`)
+    } else {
+      ElMessage.error('网络错误，无法加载服务器列表')
+    }
+  } finally {
+    loading.value = false
   }
 }
+
+const loadServers = forceReloadServers
 
 const showAddDialog = () => {
   dialogTitle.value = '添加服务器'
@@ -250,17 +274,27 @@ const saveServer = async () => {
     if (valid) {
       saving.value = true
       try {
+        let response
         if (editingId.value) {
-          await api.put(`/api/servers/${editingId.value}`, serverForm)
+          response = await api.put(`/api/servers/${editingId.value}`, serverForm)
           ElMessage.success('服务器更新成功')
         } else {
-          await api.post('/api/servers', serverForm)
+          response = await api.post('/api/servers', serverForm)
           ElMessage.success('服务器添加成功')
         }
         dialogVisible.value = false
-        loadServers()
+        
+        // 强制重新加载服务器列表
+        await forceReloadServers()
       } catch (error) {
-        ElMessage.error('操作失败，请重试')
+        console.error('Save server error:', error)
+        if (error.response?.data?.message) {
+          ElMessage.error(error.response.data.message)
+        } else if (error.response?.data?.errors) {
+          ElMessage.error(error.response.data.errors.join(', '))
+        } else {
+          ElMessage.error('操作失败，请重试')
+        }
       } finally {
         saving.value = false
       }
@@ -269,17 +303,61 @@ const saveServer = async () => {
 }
 
 const testConnection = async (server) => {
+  console.log('开始测试连接:', server)
+  
   try {
-    const response = await api.post(`/api/servers/${server.id}/test`)
-    if (response.data.success) {
-      ElMessage.success('连接测试成功')
-      // 刷新服务器列表以更新状态
-      loadServers()
-    } else {
-      ElMessage.error('连接测试失败')
+    // 先更新状态为测试中
+    const serverIndex = servers.value.findIndex(s => s.id === server.id)
+    if (serverIndex !== -1) {
+      servers.value[serverIndex] = {
+        ...servers.value[serverIndex],
+        status: 'testing'
+      }
+      console.log('设置服务器状态为测试中')
     }
+    
+    const response = await api.post(`/api/servers/${server.id}/test`)
+    console.log('测试响应:', response.data)
+    
+    const testResult = response.data
+    if (testResult.success) {
+      ElMessage.success(testResult.message || '连接测试成功')
+      
+      // 如果后端返回了更新后的服务器信息，直接使用它
+      if (testResult.data.server && serverIndex !== -1) {
+        servers.value[serverIndex] = {
+          ...servers.value[serverIndex],
+          ...testResult.data.server
+        }
+        console.log('使用后端返回的服务器信息更新状态:', testResult.data.server.status)
+      }
+    } else {
+      ElMessage.error(testResult.message || '连接测试失败')
+      
+      // 测试失败时也更新服务器信息
+      if (testResult.data.server && serverIndex !== -1) {
+        servers.value[serverIndex] = {
+          ...servers.value[serverIndex],
+          ...testResult.data.server
+        }
+        console.log('测试失败，使用后端返回的状态:', testResult.data.server.status)
+      }
+    }
+    
+    // 延迟强制刷新确保数据一致性
+    setTimeout(async () => {
+      console.log('延迟刷新服务器列表')
+      await forceReloadServers()
+    }, 1000)
+    
   } catch (error) {
-    ElMessage.error('连接测试失败')
+    console.error('测试连接错误:', error)
+    ElMessage.error(error.response?.data?.message || '连接测试失败')
+    
+    // 测试失败后强制刷新状态
+    setTimeout(async () => {
+      await forceReloadServers()
+    }, 1000)
   }
 }
 
@@ -300,6 +378,8 @@ const openTerminal = (server) => {
 }
 
 const deleteServer = async (server) => {
+  console.log('开始删除服务器:', server)
+  
   try {
     await ElMessageBox.confirm(
       `确定要删除服务器 "${server.name}" 吗？`,
@@ -311,12 +391,70 @@ const deleteServer = async (server) => {
       }
     )
     
-    await api.delete(`/api/servers/${server.id}`)
-    ElMessage.success('服务器删除成功')
-    loadServers()
+    console.log(`发送删除请求，服务器ID: ${server.id}`)
+    
+    try {
+      // 绕过axios拦截器直接发送请求
+      const response = await fetch(`/api/servers/${server.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      })
+      
+      console.log('删除请求响应状态:', response.status)
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('删除响应数据:', data)
+        
+        if (data.success) {
+          ElMessage.success(data.message || '服务器删除成功')
+          console.log('删除成功，立即移除并重新加载')
+          
+          // 立即从数组中移除
+          const index = servers.value.findIndex(s => s.id === server.id)
+          if (index !== -1) {
+            servers.value.splice(index, 1)
+            console.log(`从数组中移除服务器，剩余: ${servers.value.length}`)
+          }
+          
+          // 强制重新加载
+          await forceReloadServers()
+        } else {
+          ElMessage.error(data.message || '删除失败')
+          await forceReloadServers()
+        }
+      } else if (response.status === 404) {
+        ElMessage.error('请求的资源不存在')
+        console.log('服务器不存在(404)，从前端移除')
+        
+        // 如果服务器不存在，从前端移除
+        const index = servers.value.findIndex(s => s.id === server.id)
+        if (index !== -1) {
+          servers.value.splice(index, 1)
+          console.log(`因404移除服务器，剩余: ${servers.value.length}`)
+        }
+        
+        await forceReloadServers()
+      } else {
+        const errorText = await response.text()
+        console.error('删除请求失败:', response.status, errorText)
+        ElMessage.error(`删除失败: HTTP ${response.status}`)
+        await forceReloadServers()
+      }
+      
+    } catch (fetchError) {
+      console.error('发送删除请求时出错:', fetchError)
+      ElMessage.error('删除请求发送失败')
+      await forceReloadServers()
+    }
+    
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败，请重试')
+      console.error('删除过程出错:', error)
+      await forceReloadServers()
     }
   }
 }

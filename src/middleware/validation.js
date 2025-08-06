@@ -210,9 +210,12 @@ const validateServer = (req, res, next) => {
       'any.required': '服务器名称是必填项',
       'string.max': '服务器名称不能超过100个字符'
     }),
-    host: Joi.string().ip().required().messages({
+    host: Joi.alternatives().try(
+      Joi.string().ip(),
+      Joi.string().hostname()
+    ).required().messages({
       'string.empty': '主机地址不能为空',
-      'string.ip': '请输入有效的IP地址',
+      'alternatives.match': '请输入有效的IP地址或域名',
       'any.required': '主机地址是必填项'
     }),
     port: Joi.number().integer().min(1).max(65535).default(22),

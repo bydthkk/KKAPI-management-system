@@ -39,7 +39,7 @@ class LocalMonitorController {
       });
 
     } catch (error) {
-      console.error('获取本地监控数据失败:', error);
+      logger.error_dev('获取本地监控数据失败:', error);
       res.status(500).json({
         success: false,
         message: '获取本地监控数据失败',

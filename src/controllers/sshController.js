@@ -181,6 +181,8 @@ const updateSecuritySettings = async (req, res) => {
       SystemSettings.findOne({ where: { key: 'ssh_max_command_length' } })
     ]);
     
+    const config = require('../config/config');
+    
     res.json({
       success: true,
       data: {

@@ -45,8 +45,8 @@
 
 1. **克隆项目**
 ```bash
-git clone https://github.com/yourusername/api-management-system.git
-cd api-management-system
+git clone https://github.com/bydthkk/KKAPI-management-system.git
+cd KKAPI-management-system
 ```
 
 2. **安装依赖**
@@ -205,8 +205,8 @@ GET    /api/:endpoint        # 执行参数化API
 
 1. **克隆项目并配置**
 ```bash
-git clone https://github.com/yourusername/api-management-system.git
-cd api-management-system
+git clone https://github.com/bydthkk/KKAPI-management-system.git
+cd KKAPI-management-system
 cp .env.example .env
 ```
 
@@ -224,14 +224,14 @@ http://localhost:3000
 
 ```bash
 # 构建镜像
-docker build -t api-management-system .
+docker build -t KKAPI-management-system .
 
 # 运行容器
 docker run -d \
   --name api-management \
   -p 3000:3000 \
   -v $(pwd)/data:/app/data \
-  api-management-system
+  KKAPI-management-system
 ```
 
 ## 🔒 安全建议
@@ -260,7 +260,7 @@ docker run -d \
 
 ### 项目结构
 ```
-api-management-system/
+KKAPI-management-system/
 ├── src/                    # 后端源码
 │   ├── config/            # 配置文件
 │   ├── controllers/       # 控制器
@@ -332,12 +332,12 @@ A: 理论上没有限制，但建议根据服务器性能合理控制并发连�
 
 如果您遇到问题或有建议，请通过以下方式联系：
 
-- 创建 [GitHub Issue](https://github.com/yourusername/api-management-system/issues)
-- 发送邮件到 your.email@example.com
+- 创建 [GitHub Issue](https://github.com/bydthkk/KKAPI-management-system/issues)
+- 发送邮件到 bydth@qq.com
 
 ## 🔄 更新日志
 
-### v1.0.0 (2025-01-XX)
+### v1.0.1 (2025-08-06)
 - 初始版本发布
 - 基础服务器管理功能
 - SSH远程执行

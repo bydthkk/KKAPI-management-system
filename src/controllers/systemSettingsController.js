@@ -44,7 +44,7 @@ const getSettings = async (req, res) => {
       data: categorizedSettings
     });
   } catch (error) {
-    console.error('获取系统设置失败:', error);
+    logger.error_dev('获取系统设置失败:', error);
     res.status(500).json({
       success: false,
       message: '获取系统设置失败',
@@ -104,7 +104,7 @@ const updateSettings = async (req, res) => {
       message: '设置更新成功'
     });
   } catch (error) {
-    console.error('更新系统设置失败:', error);
+    logger.error_dev('更新系统设置失败:', error);
     res.status(500).json({
       success: false,
       message: '更新系统设置失败',
@@ -161,7 +161,7 @@ const changePassword = async (req, res) => {
       message: '密码修改成功'
     });
   } catch (error) {
-    console.error('修改密码失败:', error);
+    logger.error_dev('修改密码失败:', error);
     res.status(500).json({
       success: false,
       message: '修改密码失败',
@@ -209,7 +209,7 @@ const getSetting = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('获取设置失败:', error);
+    logger.error_dev('获取设置失败:', error);
     res.status(500).json({
       success: false,
       message: '获取设置失败',
@@ -231,7 +231,7 @@ const resetToDefaults = async (req, res) => {
       message: '已重置为默认设置'
     });
   } catch (error) {
-    console.error('重置设置失败:', error);
+    logger.error_dev('重置设置失败:', error);
     res.status(500).json({
       success: false,
       message: '重置设置失败',

@@ -24,4 +24,19 @@ if (config.nodeEnv !== 'production') {
   }));
 }
 
+// 添加条件化调试方法
+logger.debug_dev = (...args) => {
+  if (config.nodeEnv === 'development') {
+    console.log('[DEV-DEBUG]', ...args);
+  }
+};
+
+// 添加条件化错误输出方法
+logger.error_dev = (...args) => {
+  if (config.nodeEnv === 'development') {
+    console.error('[DEV-ERROR]', ...args);
+  }
+  logger.error(...args);
+};
+
 module.exports = logger;

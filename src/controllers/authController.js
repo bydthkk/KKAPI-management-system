@@ -36,7 +36,11 @@ const login = async (req, res, next) => {
     }
 
     // 更新最后登录时间
-    await user.update({ lastLoginAt: new Date() });
+    const now = new Date();
+    await user.update({ lastLoginAt: now });
+    
+    // 重新获取用户信息以包含更新后的lastLoginAt
+    await user.reload();
 
     // 生成token
     const token = generateToken(user);

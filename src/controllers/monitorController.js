@@ -4,14 +4,38 @@ const sshService = require('../services/sshService');
 // 存储每个服务器的网络历史数据用于计算速度
 const networkHistory = new Map();
 
-// 清理过期的网络历史数据
+// 清理过期的网络历史数据 - 改进内存管理
 setInterval(() => {
   const now = Date.now();
+  const maxAge = 5 * 60 * 1000; // 5分钟
+  const cleanedCount = networkHistory.size;
+  
   for (const [serverId, data] of networkHistory.entries()) {
     // 如果数据超过5分钟未更新，清理掉
-    if (now - data.timestamp > 5 * 60 * 1000) {
+    if (now - data.timestamp > maxAge) {
       networkHistory.delete(serverId);
     }
+  }
+  
+  // 记录清理情况
+  const finalCount = networkHistory.size;
+  if (cleanedCount > finalCount) {
+    logger.debug_dev('Cleaned up network history data', { 
+      before: cleanedCount, 
+      after: finalCount, 
+      removed: cleanedCount - finalCount 
+    });
+  }
+  
+  // 如果内存使用过多，警告并进行额外清理
+  if (networkHistory.size > 1000) {
+    logger.warn('Network history map growing too large', { size: networkHistory.size });
+    // 保留最近的100个服务器数据，清理其余
+    const entries = Array.from(networkHistory.entries())
+      .sort((a, b) => b[1].timestamp - a[1].timestamp)
+      .slice(0, 100);
+    networkHistory.clear();
+    entries.forEach(([key, value]) => networkHistory.set(key, value));
   }
 }, 60000); // 每分钟清理一次
 
@@ -68,7 +92,7 @@ class MonitorController {
               timestamp: new Date()
             };
           } catch (error) {
-            console.error(`监控服务器 ${server.name} 失败:`, error);
+            logger.error_dev(`监控服务器 ${server.name} 失败:`, error);
             return {
               serverId: server.id,
               serverName: server.name,
@@ -101,7 +125,7 @@ class MonitorController {
       });
 
     } catch (error) {
-      console.error('获取服务器监控数据失败:', error);
+      logger.error_dev('获取服务器监控数据失败:', error);
       res.status(500).json({
         success: false,
         message: '获取监控数据失败',
@@ -169,7 +193,7 @@ class MonitorController {
       });
 
     } catch (error) {
-      console.error('获取服务器监控数据失败:', error);
+      logger.error_dev('获取服务器监控数据失败:', error);
       res.status(500).json({
         success: false,
         message: '获取监控数据失败',
@@ -199,7 +223,7 @@ class MonitorController {
         cores: cores
       };
     } catch (error) {
-      console.error('getCpuUsage error:', error);
+      logger.error_dev('getCpuUsage error:', error);
       return {
         usage: 0,
         cores: 1
@@ -225,7 +249,7 @@ class MonitorController {
         usage: Math.round(Math.max(0, Math.min(100, usage)) * 100) / 100
       };
     } catch (error) {
-      console.error('getMemoryUsage error:', error);
+      logger.error_dev('getMemoryUsage error:', error);
       return {
         used: 0,
         total: 0,
@@ -255,7 +279,7 @@ class MonitorController {
         usage: Math.round(Math.max(0, Math.min(100, usage)) * 100) / 100
       };
     } catch (error) {
-      console.error('getDiskUsage error:', error);
+      logger.error_dev('getDiskUsage error:', error);
       return {
         used: 0,
         total: 0,
@@ -282,7 +306,7 @@ class MonitorController {
         load15: Math.round(Math.max(0, load15) * 100) / 100
       };
     } catch (error) {
-      console.error('getLoadAverage error:', error);
+      logger.error_dev('getLoadAverage error:', error);
       return {
         load1: 0,
         load5: 0,
@@ -347,7 +371,7 @@ class MonitorController {
         txSpeed: txSpeed  // KB/s
       };
     } catch (error) {
-      console.error('getNetworkInfo error:', error);
+      logger.error_dev('getNetworkInfo error:', error);
       return {
         rxBytes: 0,
         txBytes: 0,
@@ -384,7 +408,7 @@ class MonitorController {
 
       return processes.length > 0 ? processes : [];
     } catch (error) {
-      console.error('getTopProcesses error:', error);
+      logger.error_dev('getTopProcesses error:', error);
       return [];
     }
   }
