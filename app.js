@@ -3,6 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const socketIo = require('socket.io');
 
@@ -18,6 +19,17 @@ const { analyticsMiddleware } = require('./src/middleware/mobileAnalytics');
 
 const app = express();
 const server = http.createServer(app);
+
+// 全局中间件：强制所有响应不缓存
+app.use((req, res, next) => {
+  // 为所有响应设置强制不缓存的头部
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  res.setHeader('ETag', Date.now().toString()); // 每次都不同的ETag
+  next();
+});
 
 app.use(helmet({
   contentSecurityPolicy: false // 允许内联脚本和样式
@@ -38,7 +50,7 @@ app.use(morgan('combined', {
   }
 }));
 
-// 静态文件服务
+// 静态文件服务 - 简化配置，依赖全局不缓存中间件
 app.use(express.static(path.join(__dirname, 'public')));
 // 服务器发行版图标静态文件
 app.use('/icon', express.static(path.join(__dirname, 'icon')));
@@ -49,10 +61,8 @@ app.use('/api', apiResponseOptimization, routes);
 // 错误处理中间件放在最后
 app.use(errorHandler);
 
-// SPA fallback - 所有非API和非静态资源请求都返回index.html
+// SPA fallback - 简化路由，依赖全局不缓存中间件
 app.get('*', (req, res) => {
-  // 如果请求的是静态资源文件，不应该到这里
-  // 这个路由只处理前端路由
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 

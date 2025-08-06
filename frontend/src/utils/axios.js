@@ -17,6 +17,9 @@ api.interceptors.request.use(
     const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
+      console.log('发送请求:', config.method.toUpperCase(), config.url, '使用token:', token.substring(0, 20) + '...')
+    } else {
+      console.log('发送请求:', config.method.toUpperCase(), config.url, '无token')
     }
     return config
   },
@@ -28,9 +31,11 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   (response) => {
+    console.log('收到响应:', response.config.method.toUpperCase(), response.config.url, '状态:', response.status)
     return response
   },
   (error) => {
+    console.error('请求失败:', error.config?.method?.toUpperCase(), error.config?.url, '状态:', error.response?.status, '错误:', error.response?.data)
     if (error.response) {
       switch (error.response.status) {
         case 401:

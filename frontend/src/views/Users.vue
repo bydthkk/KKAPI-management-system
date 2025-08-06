@@ -33,6 +33,7 @@
       <!-- 用户列表 -->
       <el-table
         :data="users"
+        :key="tableKey"
         v-loading="loading"
         stripe
         class="users-table"
@@ -290,7 +291,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '../store/user'
 import api from '../utils/axios'
@@ -311,6 +312,20 @@ const dialogVisible = ref(false)
 const resetPasswordDialogVisible = ref(false)
 const isEditing = ref(false)
 const currentUser = ref(null)
+const tableKey = ref(0) // 用于强制刷新表格
+
+// 调试模式：监听用户数组变化
+const debugUsers = (action, data) => {
+  const currentUsersList = users.value.map(u => `${u.username}(${u.id})`)
+  console.log(`[用户数组调试] ${action}:`, {
+    操作: action,
+    当前用户数量: users.value.length,
+    用户列表: currentUsersList,
+    包含777: users.value.some(u => u.username === '777'),
+    包含666: users.value.some(u => u.username === '666'),
+    额外数据: data
+  })
+}
 
 // 分页
 const pagination = reactive({
@@ -372,22 +387,52 @@ const getMenuName = (key) => {
 const loadUsers = async () => {
   try {
     loading.value = true
+    console.log('开始加载用户列表...')
+    debugUsers('加载开始', '即将发起API请求')
+    
+    // 清空搜索条件，确保获取所有用户
     const params = {
       page: pagination.page,
       limit: pagination.limit
     }
-    if (searchQuery.value) {
-      params.search = searchQuery.value
+    // 只有在真正搜索时才添加搜索参数
+    if (searchQuery.value && searchQuery.value.trim()) {
+      params.search = searchQuery.value.trim()
     }
 
+    console.log('请求参数:', params)
     const response = await api.get('/api/users', { params })
+    console.log('API响应:', response.data)
     
     if (response.data.success) {
-      users.value = response.data.data.users
+      const newUsers = response.data.data.users || []
+      console.log('从API获取的用户数据:', newUsers.map(u => `${u.username}(${u.id})`))
+      
+      // 记录更新前状态
+      debugUsers('更新前', '即将更新用户数组')
+      
+      // 清空现有数组并重新赋值
+      users.value.length = 0
+      users.value.push(...newUsers)
+      
+      // 记录更新后状态
+      debugUsers('更新后', '用户数组已更新')
+      
       pagination.total = response.data.data.pagination.total
+      console.log('用户列表加载成功，用户数量:', users.value.length)
+      
+      // 强制刷新表格
+      tableKey.value += 1
+      
+      // 等待下一个tick确保DOM更新
+      await nextTick()
+      
+      // 最终验证
+      debugUsers('加载完成', 'DOM已更新')
     }
   } catch (error) {
     console.error('加载用户列表失败:', error)
+    debugUsers('加载失败', error.message)
     ElMessage.error('加载用户列表失败')
   } finally {
     loading.value = false
@@ -509,7 +554,35 @@ const saveUser = async () => {
     if (response.data.success) {
       ElMessage.success(isEditing.value ? '用户更新成功' : '用户创建成功')
       dialogVisible.value = false
-      loadUsers()
+      
+      if (isEditing.value) {
+        // 编辑模式：重新加载列表
+        console.log('用户更新成功，正在重新加载用户列表...')
+        await loadUsers()
+      } else {
+        // 创建模式：直接添加新用户到列表顶部
+        console.log('用户创建成功，正在添加到列表')
+        const newUser = response.data.data
+        console.log('新创建的用户数据:', newUser)
+        
+        debugUsers('创建用户前', '即将添加新用户到列表')
+        
+        // 清空数组并重新构建，确保Vue检测到变化
+        const currentUsers = [...users.value]
+        users.value.length = 0
+        users.value.push(newUser, ...currentUsers)
+        pagination.total += 1
+        
+        debugUsers('创建用户后', '新用户已添加')
+        
+        // 强制刷新表格
+        tableKey.value += 1
+        
+        // 等待DOM更新
+        await nextTick()
+        
+        debugUsers('创建完成', 'DOM已更新，新用户应该可见')
+      }
     }
   } catch (error) {
     console.error('保存用户失败:', error)
@@ -603,10 +676,57 @@ const formatDate = (dateString) => {
   return new Date(dateString).toLocaleString('zh-CN')
 }
 
+// 监听用户数组变化
+watch(users, (newUsers, oldUsers) => {
+  console.log('=== 用户数组发生变化 ===')
+  console.log('变化时间:', new Date().toISOString())
+  console.log('旧用户数量:', oldUsers?.length || 0)
+  console.log('新用户数量:', newUsers?.length || 0)
+  
+  if (oldUsers && newUsers) {
+    const oldUserIds = oldUsers.map(u => u.id)
+    const newUserIds = newUsers.map(u => u.id)
+    const added = newUserIds.filter(id => !oldUserIds.includes(id))
+    const removed = oldUserIds.filter(id => !newUserIds.includes(id))
+    
+    if (added.length > 0) {
+      console.log('新增用户ID:', added)
+    }
+    if (removed.length > 0) {
+      console.log('删除用户ID:', removed)
+    }
+  }
+  
+  debugUsers('数组变化监听', '用户数组发生了变化')
+}, { deep: true })
+
 // 组件挂载
 onMounted(() => {
+  console.log('=== Users.vue 组件生命周期 ===')
+  console.log('组件挂载时间:', new Date().toISOString())
+  
+  // 清空搜索查询，确保显示所有用户
+  searchQuery.value = ''
+  debugUsers('组件挂载', '初始状态')
+  
+  console.log('组件已挂载，开始初始化用户列表')
   loadUsers()
   loadMenuPermissions()
+  
+  // 添加页面可见性监听，检测用户切换标签页的情况
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      console.log('页面重新可见，检查用户列表状态')
+      debugUsers('页面重新可见', '检查用户数组状态')
+    }
+  }
+  
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  
+  // 添加页面刷新前的调试
+  window.addEventListener('beforeunload', () => {
+    debugUsers('页面即将刷新', '记录刷新前状态')
+  })
 })
 </script>
 

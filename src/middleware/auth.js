@@ -23,7 +23,8 @@ const generateToken = (user) => {
     { 
       id: user.id, 
       username: user.username, 
-      role: user.role 
+      role: user.role,
+      permissions: user.permissions // 包含用户权限信息
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }

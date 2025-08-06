@@ -7,6 +7,8 @@ export default defineConfig({
   build: {
     outDir: '../public',  // 构建输出到根目录的public目录
     emptyOutDir: false,   // 不清空目录，保留其他文件
+    minify: false,        // 禁用压缩，保留调试代码
+    sourcemap: true       // 生成源码映射
   },
   server: {
     port: 3001,

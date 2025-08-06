@@ -13,6 +13,7 @@ const monitorRoutes = require('./monitor');
 const systemSettingsRoutes = require('./systemSettings');
 const userRoutes = require('./users');
 const mobileRoutes = require('./mobile');
+const debugRoutes = require('./debug');
 
 router.get('/', (req, res) => {
   res.json({
@@ -106,6 +107,7 @@ router.use('/monitor', monitorRoutes);
 router.use('/system-settings', systemSettingsRoutes);
 router.use('/users', userRoutes);
 router.use('/mobile', mobileRoutes);
+router.use('/debug', debugRoutes);
 
 // 动态API端点 - 通过apiEndpoint执行参数化命令
 const { Parameter, Server, Task } = require('../models');

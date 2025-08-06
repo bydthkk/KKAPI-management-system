@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户列表调试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-section { border: 1px solid #ccc; margin: 20px 0; padding: 15px; }
+        .user-item { padding: 8px; border-bottom: 1px solid #eee; }
+        .error { color: red; }
+        .success { color: green; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>用户列表调试页面</h1>
+    
+    <div class="debug-section">
+        <h3>控制面板</h3>
+        <button onclick="testAPI()">测试API</button>
+        <button onclick="clearStorage()">清除存储</button>
+        <button onclick="checkToken()">检查Token</button>
+        <button onclick="forceRefresh()">强制刷新</button>
+    </div>
+
+    <div class="debug-section">
+        <h3>API测试结果</h3>
+        <div id="api-result"></div>
+    </div>
+
+    <div class="debug-section">
+        <h3>用户列表</h3>
+        <div id="user-list"></div>
+    </div>
+
+    <div class="debug-section">
+        <h3>调试信息</h3>
+        <pre id="debug-info"></pre>
+    </div>
+
+    <script>
+        let debugLog = [];
+        
+        function log(message) {
+            debugLog.push(new Date().toLocaleTimeString() + ': ' + message);
+            document.getElementById('debug-info').textContent = debugLog.slice(-10).join('\n');
+            console.log(message);
+        }
+
+        function clearStorage() {
+            localStorage.clear();
+            sessionStorage.clear();
+            log('已清除所有存储');
+        }
+
+        function checkToken() {
+            const token = localStorage.getItem('token');
+            const user = localStorage.getItem('user');
+            log('Token: ' + (token ? token.substring(0, 20) + '...' : '无'));
+            log('User: ' + (user || '无'));
+        }
+
+        function forceRefresh() {
+            location.reload(true);
+        }
+
+        async function testAPI() {
+            try {
+                log('开始测试API...');
+                
+                // 获取token
+                let token = localStorage.getItem('token');
+                if (!token) {
+                    log('没有token，尝试登录...');
+                    const loginResponse = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: 'admin', password: 'admin123' })
+                    });
+                    const loginData = await loginResponse.json();
+                    
+                    if (loginData.success) {
+                        token = loginData.data.token;
+                        localStorage.setItem('token', token);
+                        localStorage.setItem('user', JSON.stringify(loginData.data.user));
+                        log('登录成功');
+                    } else {
+                        throw new Error('登录失败: ' + loginData.message);
+                    }
+                }
+                
+                // 调用用户列表API
+                log('调用用户列表API...');
+                const response = await fetch('/api/users?page=1&limit=20', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                
+                const data = await response.json();
+                log('API响应状态: ' + response.status);
+                
+                if (data.success) {
+                    log('成功获取用户列表，数量: ' + data.data.users.length);
+                    
+                    // 显示用户列表
+                    const userListDiv = document.getElementById('user-list');
+                    userListDiv.innerHTML = '';
+                    
+                    data.data.users.forEach((user, index) => {
+                        const userDiv = document.createElement('div');
+                        userDiv.className = 'user-item';
+                        userDiv.innerHTML = `
+                            <strong>${index + 1}. ${user.username}</strong> 
+                            (ID: ${user.id}, 角色: ${user.role}, 状态: ${user.status})
+                        `;
+                        // 高亮777和666用户
+                        if (user.username === '777' || user.username === '666') {
+                            userDiv.style.backgroundColor = '#ffffcc';
+                            userDiv.style.border = '2px solid #ff9900';
+                        }
+                        userListDiv.appendChild(userDiv);
+                    });
+                    
+                    // 检查特定用户
+                    const user777 = data.data.users.find(u => u.username === '777');
+                    const user666 = data.data.users.find(u => u.username === '666');
+                    
+                    document.getElementById('api-result').innerHTML = `
+                        <div class="success">✅ API调用成功</div>
+                        <div>总用户数: ${data.data.users.length}</div>
+                        <div>用户777: ${user777 ? '✅ 存在 (ID:' + user777.id + ')' : '❌ 不存在'}</div>
+                        <div>用户666: ${user666 ? '✅ 存在 (ID:' + user666.id + ')' : '❌ 不存在'}</div>
+                    `;
+                    
+                    log('用户777状态: ' + (user777 ? '存在' : '不存在'));
+                    log('用户666状态: ' + (user666 ? '存在' : '不存在'));
+                    
+                } else {
+                    throw new Error('API返回错误: ' + data.message || data.error);
+                }
+                
+            } catch (error) {
+                log('错误: ' + error.message);
+                document.getElementById('api-result').innerHTML = `
+                    <div class="error">❌ 错误: ${error.message}</div>
+                `;
+            }
+        }
+
+        // 页面加载时自动测试
+        window.addEventListener('load', () => {
+            log('调试页面已加载');
+            checkToken();
+            testAPI();
+        });
+    </script>
+</body>
+</html>
