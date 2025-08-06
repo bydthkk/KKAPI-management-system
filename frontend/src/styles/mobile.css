@@ -1,0 +1,214 @@
+/* Mobile optimizations for tables and forms */
+
+/* Table responsive optimizations */
+@media (max-width: 768px) {
+  /* El Table mobile optimizations */
+  .el-table {
+    font-size: 12px !important;
+  }
+  
+  .el-table th,
+  .el-table td {
+    padding: 8px 4px !important;
+    word-break: break-word;
+  }
+  
+  .el-table th {
+    font-size: 11px !important;
+  }
+  
+  /* Hide less important columns on mobile */
+  .el-table .mobile-hide {
+    display: none !important;
+  }
+  
+  /* Make table cards stack vertically on very small screens */
+  .el-card {
+    margin-bottom: 16px;
+  }
+  
+  /* Optimize table action buttons */
+  .el-button--small {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+    margin: 2px !important;
+  }
+  
+  /* Stack table buttons vertically on very small screens */
+  .el-table .cell .el-button {
+    display: block;
+    width: 100%;
+    margin: 2px 0;
+  }
+  
+  /* Form optimizations */
+  .el-form {
+    font-size: 14px;
+  }
+  
+  .el-form-item__label {
+    font-size: 13px !important;
+    line-height: 1.4;
+    padding-bottom: 4px !important;
+  }
+  
+  .el-input__inner {
+    font-size: 14px !important;
+    padding: 8px 12px !important;
+  }
+  
+  .el-textarea__inner {
+    font-size: 14px !important;
+    padding: 8px 12px !important;
+  }
+  
+  .el-select {
+    font-size: 14px !important;
+  }
+  
+  .el-button {
+    font-size: 13px !important;
+    padding: 8px 16px !important;
+  }
+  
+  /* Dialog optimizations */
+  .el-dialog {
+    width: 95% !important;
+    margin-top: 5vh !important;
+  }
+  
+  .el-dialog__header {
+    padding: 16px 16px 12px !important;
+  }
+  
+  .el-dialog__body {
+    padding: 16px !important;
+  }
+  
+  .el-dialog__footer {
+    padding: 12px 16px 16px !important;
+  }
+  
+  /* Tag optimizations */
+  .el-tag {
+    font-size: 11px !important;
+    height: auto !important;
+    line-height: 1.4 !important;
+    padding: 2px 6px !important;
+  }
+  
+  /* Pagination optimizations */
+  .el-pagination {
+    padding: 8px 0 !important;
+    text-align: center;
+  }
+  
+  .el-pagination .el-pager li {
+    min-width: 28px !important;
+    height: 28px !important;
+    line-height: 28px !important;
+    font-size: 12px !important;
+  }
+  
+  .el-pagination .btn-prev,
+  .el-pagination .btn-next {
+    min-width: 28px !important;
+    height: 28px !important;
+    line-height: 28px !important;
+  }
+  
+  /* Card optimizations */
+  .el-card__header {
+    padding: 12px 16px !important;
+    border-bottom: 1px solid #ebeef5;
+  }
+  
+  .el-card__body {
+    padding: 16px !important;
+  }
+  
+  /* Alert optimizations */
+  .el-alert {
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+  }
+  
+  /* Search bar optimizations */
+  .search-bar {
+    margin-bottom: 12px;
+  }
+  
+  /* Header actions should stack on mobile */
+  .header-actions {
+    margin-top: 8px;
+  }
+  
+  .header-actions .el-button {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Very small screen optimizations */
+  .el-table {
+    font-size: 11px !important;
+  }
+  
+  .el-table th,
+  .el-table td {
+    padding: 6px 2px !important;
+  }
+  
+  .el-button--small {
+    padding: 2px 6px !important;
+    font-size: 10px !important;
+  }
+  
+  .el-dialog {
+    width: 98% !important;
+    margin-top: 2vh !important;
+  }
+  
+  .el-form-item__label {
+    font-size: 12px !important;
+  }
+  
+  .el-input__inner,
+  .el-textarea__inner {
+    font-size: 13px !important;
+  }
+  
+  /* Stack form items vertically with full width */
+  .el-row .el-col {
+    width: 100% !important;
+    margin-bottom: 12px;
+  }
+}
+
+/* Landscape phone optimizations */
+@media (max-width: 768px) and (orientation: landscape) {
+  .el-dialog {
+    margin-top: 2vh !important;
+    max-height: 96vh;
+    overflow-y: auto;
+  }
+}
+
+/* Hide specific mobile-unfriendly elements */
+@media (max-width: 768px) {
+  /* Hide desktop-only breadcrumbs */
+  .breadcrumb {
+    display: none;
+  }
+  
+  /* Optimize dropdown menus */
+  .el-dropdown-menu {
+    min-width: 120px;
+  }
+  
+  .el-dropdown-menu__item {
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+  }
+}
