@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const config = require('../config/config');
 
 // 导入路由模块
 const authRoutes = require('./auth');
@@ -14,6 +15,18 @@ const systemSettingsRoutes = require('./systemSettings');
 const userRoutes = require('./users');
 const mobileRoutes = require('./mobile');
 const debugRoutes = require('./debug');
+
+// 添加域名配置接口
+router.get('/config/domain', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      enabled: config.domain.enabled,
+      url: config.domain.url,
+      port: config.port
+    }
+  });
+});
 
 router.get('/', (req, res) => {
   res.json({

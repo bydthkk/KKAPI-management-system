@@ -20,9 +20,9 @@ const { analyticsMiddleware } = require('./src/middleware/mobileAnalytics');
 const app = express();
 const server = http.createServer(app);
 
-// 全局中间件：强制所有响应不缓存
-app.use((req, res, next) => {
-  // 为所有响应设置强制不缓存的头部
+// API数据不缓存中间件：只对API请求禁用缓存
+app.use('/api', (req, res, next) => {
+  // 只为API响应设置强制不缓存的头部
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, proxy-revalidate, max-age=0');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');

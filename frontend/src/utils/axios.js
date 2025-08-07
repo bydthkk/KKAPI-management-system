@@ -2,6 +2,21 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '../router'
 
+// 动态获取baseURL的函数
+const getBaseURL = async () => {
+  try {
+    // 先尝试从本地获取配置
+    const response = await axios.get('/api/config/domain')
+    if (response.data.success && response.data.data.enabled) {
+      return response.data.data.url
+    }
+  } catch (error) {
+    // 如果获取配置失败，使用默认配置
+    console.log('使用默认baseURL配置')
+  }
+  return '' // 默认为空，使用相对路径
+}
+
 // 创建axios实例
 const api = axios.create({
   baseURL: '',
@@ -11,9 +26,23 @@ const api = axios.create({
   }
 })
 
+// 初始化baseURL
+let baseURLInitialized = false
+const initializeBaseURL = async () => {
+  if (!baseURLInitialized) {
+    const baseURL = await getBaseURL()
+    api.defaults.baseURL = baseURL
+    baseURLInitialized = true
+    console.log('API baseURL 设置为:', baseURL || '相对路径')
+  }
+}
+
 // 请求拦截器
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
+    // 确保baseURL已初始化
+    await initializeBaseURL()
+    
     const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`

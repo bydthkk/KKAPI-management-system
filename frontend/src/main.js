@@ -18,6 +18,12 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 
 const pinia = createPinia()
 app.use(pinia)
+
+// 初始化用户状态 - 在路由挂载前从localStorage恢复状态
+import { useUserStore } from './store/user'
+const userStore = useUserStore()
+userStore.initAuth()
+
 app.use(router)
 app.use(ElementPlus)
 app.use(i18n)

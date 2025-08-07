@@ -4,6 +4,13 @@ const config = {
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
   
+  // 域名配置
+  domain: {
+    enabled: process.env.DOMAIN_ENABLED === 'true', // 是否启用域名访问
+    url: process.env.DOMAIN_URL || '', // 域名URL，如: https://yourdomain.com
+    fallbackPort: process.env.PORT || 3000 // 直接访问时的端口
+  },
+  
   ssh: {
     defaultPort: parseInt(process.env.DEFAULT_SSH_PORT) || 22,
     timeout: parseInt(process.env.SSH_TIMEOUT) || 30000,

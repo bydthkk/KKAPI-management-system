@@ -57,8 +57,21 @@ export const useUserStore = defineStore('user', {
       }
     },
 
-    initAuth() {
-      // axios拦截器会自动处理token，这里不需要手动设置
+    async initAuth() {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        this.token = ''
+        this.user = {}
+        this.isLoggedIn = false
+        return false
+      }
+
+      // 直接设置状态，不验证token（避免循环调用）
+      this.token = token
+      this.user = JSON.parse(localStorage.getItem('user') || '{}')
+      this.isLoggedIn = true
+      
+      console.log('从localStorage恢复登录状态:', { token: token.substring(0, 20) + '...', user: this.user.username })
       return true
     }
   }
