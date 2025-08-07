@@ -14,15 +14,22 @@ export const useUserStore = defineStore('user', {
         const response = await api.post('/api/auth/login', credentials)
         const { token, user } = response.data.data
 
+        // 立即保存到localStorage
+        localStorage.setItem('token', token)
+        localStorage.setItem('user', JSON.stringify(user))
+        
+        // 然后更新store状态
         this.token = token
         this.user = user
         this.isLoggedIn = true
 
-        localStorage.setItem('token', token)
-        localStorage.setItem('user', JSON.stringify(user))
+        console.log('=== 登录成功，token已保存 ===')
+        console.log('Token:', token.substring(0, 20) + '...')
+        console.log('LocalStorage中的token:', localStorage.getItem('token')?.substring(0, 20) + '...')
 
         return { success: true }
       } catch (error) {
+        console.error('登录失败:', error)
         return { 
           success: false, 
           message: error.response?.data?.message || '登录失败' 

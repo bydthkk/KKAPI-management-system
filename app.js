@@ -34,7 +34,28 @@ app.use('/api', (req, res, next) => {
 app.use(helmet({
   contentSecurityPolicy: false // 允许内联脚本和样式
 }));
-app.use(cors());
+
+// CORS配置 - 明确支持域名访问和预检请求
+app.use(cors({
+  origin: true, // 允许所有来源
+  credentials: true, // 允许携带认证信息
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Authorization'],
+  preflightContinue: false,
+  optionsSuccessStatus: 200
+}));
+
+// 调试中间件：检查Authorization头
+app.use('/api', (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  console.log('=== API请求调试 ===');
+  console.log('路径:', req.method, req.originalUrl);
+  console.log('来源:', req.headers.origin || req.headers.host);
+  console.log('Authorization头:', authHeader ? `Bearer ${authHeader.substring(7, 27)}...` : '无');
+  console.log('所有请求头:', Object.keys(req.headers));
+  next();
+});
 
 // 移动设备检测中间件
 app.use(deviceDetection);
